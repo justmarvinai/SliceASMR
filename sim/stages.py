@@ -175,9 +175,9 @@ def cube_velocity(stage, t, h=1e-3):
 
 def build_stages():
     st = [
-        Stage(0, "1 SLICE", 1, 7.6, "plane", plane=((1.0, 0.0, 0.0), 0.0), yaw=-32.0, cam_dist=10.0,
+        Stage(0, "1 SLICE", 1, 7.6, "plane", plane=((1.0, 0.0, 0.0), 0.0), yaw=-32.0, cam_dist=10.6,
               sweep=0.62, hover_y=2.35, pile_dist=1.06, pile_elev=30.0,
-              release="bloom_x", release_params=dict(k=0.0, kmin=1.15, jitter=0.03)),
+              release="bloom_x", release_params=dict(k=0.0, kmin=0.95, jitter=0.03, pivot="spine")),
         Stage(1, "10 SLICES", 10, 8.4, "grid", grid=(10, 1, 1), order="x", yaw=34.0, cam_dist=11.0,
               pile_dist=1.12, pile_elev=33.0,
               release="bloom_x", release_params=dict(k=1.5, kmin=0.22, jitter=0.10)),
@@ -232,7 +232,10 @@ def release_states(stage, rng):
                 out_dir = r / rn if rn > 1e-6 else np.zeros(3)
                 kick = prm["k"] * r + prm.get("kmin", 0.0) * out_dir
                 w_loc = np.cross([0.0, 1.0, 0.0], kick)
-            pivot = np.array([c[0] + out_dir[0] * half[0], -CUBE_H, c[2] + out_dir[2] * half[2]])
+            if prm.get("pivot", "outer") == "spine":   # hinge on the shared bottom edge, like a book
+                pivot = np.array([0.0, -CUBE_H, c[2]])
+            else:
+                pivot = np.array([c[0] + out_dir[0] * half[0], -CUBE_H, c[2] + out_dir[2] * half[2]])
             w_kick = R @ w_loc
             av = av + w_kick
             lv = lv + np.cross(w_kick, R @ (c - pivot))

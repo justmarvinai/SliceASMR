@@ -2,7 +2,7 @@
 import numpy as np
 
 PARAMS = dict(
-    EXPOSURE=1.0,
+    EXPOSURE=1.12,
     BLOOM_STRENGTH=0.12,
     BLOOM_THRESHOLD=1.0,
     VIGNETTE=0.45,
@@ -10,7 +10,7 @@ PARAMS = dict(
     FLOOR_RGB=(0.15, 0.155, 0.17),
     FLOOR_ROUGH=0.22,
     FLOOR_F0=0.04,
-    FLOOR_SPEC=1.0,
+    FLOOR_SPEC=0.85,
     AMB_RGB=(0.030, 0.032, 0.042),
     ENV_TOP_RGB=(0.020, 0.023, 0.034),
     ENV_HOR_RGB=(0.003, 0.0035, 0.005),
@@ -50,7 +50,7 @@ def rect_light(center, facing, w, h, rgb, spot=0.0, pick=1.0, shadow=True, up=(0
 def lights_for(center):
     """Softbox rig around an arena centre: key from above, rim strip behind, fill."""
     c = np.asarray(center, float)
-    key = rect_light(c + [-0.8, 8.0, -1.6], [0.08, -1, 0.15], 2.6, 2.6, (55.0, 53.0, 50.0), spot=6.0, pick=1.0)
+    key = rect_light(c + [-0.8, 8.0, 1.6], [0.06, -1, -0.16], 2.6, 2.6, (55.0, 53.0, 50.0), spot=6.0, pick=1.0)
     rim_pos = c + [0.8, 4.2, -6.8]
     rim = rect_light(rim_pos, c + [0, 1.2, 0] - rim_pos, 6.0, 0.9, (34.0, 35.0, 38.0), pick=0.9)
     fill_pos = c + [-7.0, 3.5, 5.0]

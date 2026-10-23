@@ -1462,7 +1462,9 @@ int main(int argc, char **argv) {
   std::string outdir = argv[2];
   int first = atoi(argv[3]), last = atoi(argv[4]);
   int W = sc.W, H = sc.H, smin = sc.spp_min, smax = sc.spp_max;
+  bool skip_existing = false;
   for (int i = 5; i < argc; ++i) {
+    if (!strcmp(argv[i], "--skip-existing")) { skip_existing = true; continue; }
     if (!strcmp(argv[i], "--res") && i + 2 < argc) { W = atoi(argv[i + 1]); H = atoi(argv[i + 2]); i += 2; }
     else if (!strcmp(argv[i], "--spp") && i + 2 < argc) { smin = atoi(argv[i + 1]); smax = atoi(argv[i + 2]); i += 2; }
   }
@@ -1472,6 +1474,19 @@ int main(int argc, char **argv) {
   std::vector<uint8_t> rgb;
   for (int fi = first; fi <= last; ++fi) {
     auto t0 = std::chrono::steady_clock::now();
+    if (skip_existing) {
+      int32_t no;
+      fseek(sc.fp, (long)sc.offsets[fi], SEEK_SET);
+      rd(sc.fp, &no, 1);
+      char name[512];
+      snprintf(name, sizeof(name), "%s/%05d.png", outdir.c_str(), no);
+      if (FILE *ex = fopen(name, "rb")) {
+        fseek(ex, 0, SEEK_END);
+        const long sz = ftell(ex);
+        fclose(ex);
+        if (sz > 1000) continue;
+      }
+    }
     load_frame(sc, fi, *F);
     double avg = 0;
     render_frame(sc, *F, W, H, smin, smax, hdr, avg);

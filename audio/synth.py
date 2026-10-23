@@ -98,7 +98,7 @@ def laser_pass(beams, t_fade_in, t_sweep, t_fade_out, contact):
     voices = min(beams, 6)
     whine = np.zeros(n)
     for j in range(voices):
-        fj = 1480.0 * (1 + 0.011 * (j - (voices - 1) / 2)) * (1 + 0.004 * np.sin(2 * np.pi * (5.5 + j) * t))
+        fj = 740.0 * (1.5 if j % 2 else 1.0) * (1 + 0.009 * (j - (voices - 1) / 2)) * (1 + 0.004 * np.sin(2 * np.pi * (5.5 + j) * t))
         glide = 1 - 0.06 * np.clip((t - t_fade_in - t_sweep) / t_fade_out, 0, 1)
         whine += np.sin(2 * np.pi * np.cumsum(fj * glide) / SR + j)
     whine /= math.sqrt(voices)
@@ -146,6 +146,26 @@ def bwomp(f0=72.0, dur=0.9, wob=1.9):
     s *= 0.6 + 0.4 * np.cos(2 * np.pi * wob * t)
     s += 0.25 * filt(noise(len(t)), "bandpass", [180, 700]) * np.exp(-t / 0.04)
     return s * np.minimum(1, t / 0.004)
+
+
+def levitation_hum(dur, f0=55.0):
+    """Soft magnetic hum while the cube floats; fades in, then drops in pitch at the release."""
+    t = tvec(dur)
+    drop = np.clip((t - (dur - 0.35)) / 0.35, 0, 1)
+    f = f0 * (1 - 0.45 * drop ** 2)
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    s = np.sin(ph) + 0.45 * np.sin(2 * ph) + 0.2 * np.sin(3 * ph + 0.5)
+    s *= 1 + 0.15 * np.sin(2 * np.pi * 3.1 * t)
+    env = np.clip(t / 0.5, 0, 1) * (1 - drop) ** 1.5
+    return s * env
+
+
+def sub_thump(weight=1.0):
+    t = tvec(0.8)
+    f = 48.0 * (1 + 0.8 * np.exp(-t / 0.03))
+    s = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / (0.16 + 0.08 * weight))
+    s += 0.5 * filt(noise(len(t)), "lowpass", 300.0) * np.exp(-t / 0.05)
+    return s * np.minimum(1, t / 0.003)
 
 
 def tick(f=950.0):
@@ -197,8 +217,10 @@ def main(timeline_path, out_path):
         mix.add(t0 + 0.25, tick(1180.0), 0.0, 0.10)
         mix.add(t0 + 0.31, tick(1580.0), 0.0, 0.06)
         # the cube flies in from above and is caught by the levitation field
-        mix.add(t0 + 0.30, whoosh(0.75, 3600, 420, peak=0.8), 0.0, 0.32)
-        mix.add(t0 + 0.30 + 0.58, bwomp(), 0.0, 0.55)
+        catch = st.get("catch", t0 + 0.85)
+        mix.add(catch - 0.62, whoosh(0.75, 3600, 420, peak=0.8), 0.0, 0.32)
+        mix.add(catch - 0.03, bwomp(), 0.0, 0.55)
+        mix.add(catch, levitation_hum(st["release"] - catch + 0.05), 0.0, 0.05)
         # laser passes
         for p in st["passes"]:
             sweep = p["t1"] - p["t0"]
@@ -216,6 +238,9 @@ def main(timeline_path, out_path):
         # impacts from the physics simulation
         # contacts in the first instants after the drop are pieces pushing apart, not impacts
         ev = [e for e in st["impacts"] if e["t"] > st["release"] + 0.06]
+        floor_hits = [e["t"] for e in ev if e["floor"]]
+        if floor_hits:   # the weight of the whole cube meeting the floor
+            mix.add(min(floor_hits) - 0.004, sub_thump(), 0.0, 0.42)
         if ev:
             times = np.array([e["t"] for e in ev])
             order = np.argsort(times)

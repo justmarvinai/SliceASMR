@@ -243,9 +243,14 @@ def main():
     timeline = dict(fps=fps, total=total, nframes=nframes, stages=[])
     for st in stages:
         ev = data[st.index].events if st.index in data else []
+        # moment the levitation field "catches" the flying cube (peak upward acceleration)
+        ts = np.arange(0.0, 2.5, 1 / 240)
+        ys = np.array([cube_motion(st, t)[0][1] for t in ts])
+        ay = np.gradient(np.gradient(ys, ts), ts)
+        catch = float(ts[np.argmax(ay[:len(ts) - 2])])
         timeline["stages"].append(dict(
             index=st.index, title=st.title, count=st.count, t_start=st.t_start, duration=st.duration,
-            release=st.t_start + st.release_t,
+            catch=st.t_start + catch, release=st.t_start + st.release_t,
             passes=[dict(t0=st.t_start + p.t0, t1=st.t_start + p.t1, beams=len(p.planes)) for p in st.passes],
             impacts=[dict(e, t=e["t"] + st.t_start) for e in ev],
             arena_x=float(st.arena[0])))
