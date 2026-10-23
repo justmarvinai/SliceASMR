@@ -67,23 +67,28 @@ class Mix:
 # ------------------------------------------------------------------ sounds --
 
 def jelly_impact(v, size, floor):
-    """Gummy hitting the floor (floor=True) or another gummy."""
+    """Gummy hitting the floor (floor=True) or another gummy: a soft pitched thud,
+    a wet slap, a squish and, for small pieces, a crisp little tick."""
     dur = 0.32 + 0.25 * min(1.0, size)
     t = tvec(dur)
-    det = RNG.uniform(0.92, 1.08)
-    f0 = 150.0 * (0.2 / size) ** 0.38 * det * (0.85 if floor else 1.3)
+    det = RNG.uniform(0.9, 1.1)
+    f0 = 185.0 * (0.2 / size) ** 0.33 * det * (0.85 if floor else 1.3)
     f = f0 * (1 + 0.6 * np.exp(-t / 0.010)) * (1 - 0.18 * (1 - np.exp(-t / 0.07)))
     ph = 2 * np.pi * np.cumsum(f) / SR
-    tb = 0.040 * (size / 0.2) ** 0.35
+    tb = 0.038 * (size / 0.2) ** 0.35
     body = np.sin(ph) * np.exp(-t / tb) + 0.35 * np.sin(2.43 * ph) * np.exp(-t / (tb * 0.5))
-    hi = min(9000.0, 2600.0 * (0.2 / size) ** 0.25)
-    slap = filt(noise(len(t)), "bandpass", [hi * 0.4, hi * 1.6]) * np.exp(-t / 0.005)
-    squish = filt(noise(len(t)), "bandpass", [250, 1300]) * (t / 0.012) * np.exp(1 - t / 0.012)
+    hi = min(7000.0, 2400.0 * (0.2 / size) ** 0.22)
+    slap = filt(noise(len(t)), "bandpass", [hi * 0.45, hi * 1.9]) * np.exp(-t / 0.007)
+    tq = 0.010 + 0.012 * min(1.0, size)
+    squish = filt(noise(len(t)), "bandpass", [450, 2300]) * (t / tq) * np.exp(1 - t / tq)
+    squish *= 0.7 + 0.3 * np.sin(2 * np.pi * RNG.uniform(25, 45) * t)
+    tick = filt(noise(len(t)), "bandpass", [3000, 9000]) * np.exp(-t / 0.0018)
     fw = 5.5 * math.sqrt(0.2 / size)
     tail = np.sin(2 * np.pi * f0 * 0.62 * t) * np.exp(-t / (2.2 * tb)) * (0.55 + 0.45 * np.sin(2 * np.pi * fw * t))
-    a_slap = 0.75 if floor else 0.45
-    s = body + a_slap * slap + 0.30 * squish + 0.22 * tail
-    s *= np.minimum(1.0, t / 0.0008)            # no click at the onset
+    small = float(np.clip((0.5 - size) / 0.3, 0, 1))
+    s = (0.55 * body + (1.25 if floor else 0.9) * slap + 0.65 * squish + 0.18 * tail
+         + (0.25 if floor else 0.6) * small * tick)
+    s *= np.minimum(1.0, t / 0.0006)            # no click at the onset
     return s
 
 
@@ -118,7 +123,7 @@ def laser_pass(beams, t_fade_in, t_sweep, t_fade_out, contact):
     lfo = 0.6 + 0.4 * np.sin(2 * np.pi * 13 * t + RNG.uniform(0, 6))
     squelch = filt(noise(n), "bandpass", [420, 1300]) * lfo
     thick = 1 + 0.08 * min(beams, 9)
-    s = (0.10 * whine + 0.05 * hum) * env + (0.30 * sizzle + 0.55 * shh * thick + 0.28 * squelch * thick) * cenv
+    s = (0.10 * whine + 0.04 * hum) * env + (0.20 * sizzle + 0.60 * shh * thick + 0.30 * squelch * thick) * cenv
     # crisp tick when the beams leave the jelly
     k0 = int(c1 * SR)
     tick = filt(noise(int(0.03 * SR)), "highpass", 2500) * np.exp(-tvec(0.03) / 0.004)
@@ -142,7 +147,7 @@ def whoosh(dur, f_hi=3200.0, f_lo=380.0, peak=0.75):
 def bwomp(f0=72.0, dur=0.9, wob=1.9):
     t = tvec(dur)
     f = f0 * (1 + 0.35 * np.exp(-t / 0.05))
-    s = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / 0.28)
+    s = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / 0.18)
     s *= 0.6 + 0.4 * np.cos(2 * np.pi * wob * t)
     s += 0.25 * filt(noise(len(t)), "bandpass", [180, 700]) * np.exp(-t / 0.04)
     return s * np.minimum(1, t / 0.004)
@@ -219,8 +224,8 @@ def main(timeline_path, out_path):
         # the cube flies in from above and is caught by the levitation field
         catch = st.get("catch", t0 + 0.85)
         mix.add(catch - 0.62, whoosh(0.75, 3600, 420, peak=0.8), 0.0, 0.32)
-        mix.add(catch - 0.03, bwomp(), 0.0, 0.55)
-        mix.add(catch, levitation_hum(st["release"] - catch + 0.05), 0.0, 0.05)
+        mix.add(catch - 0.03, bwomp(), 0.0, 0.36)
+        mix.add(catch, levitation_hum(st["release"] - catch + 0.05), 0.0, 0.016)
         # laser passes
         for p in st["passes"]:
             sweep = p["t1"] - p["t0"]
@@ -240,7 +245,7 @@ def main(timeline_path, out_path):
         ev = [e for e in st["impacts"] if e["t"] > st["release"] + 0.06]
         floor_hits = [e["t"] for e in ev if e["floor"]]
         if floor_hits:   # the weight of the whole cube meeting the floor
-            mix.add(min(floor_hits) - 0.004, sub_thump(), 0.0, 0.42)
+            mix.add(min(floor_hits) - 0.004, sub_thump(), 0.0, 0.26)
         if ev:
             times = np.array([e["t"] for e in ev])
             order = np.argsort(times)
@@ -253,7 +258,7 @@ def main(timeline_path, out_path):
                 v = e["v"]
                 amp = min(2.2, (v / 3.0) ** 1.15) * (e["size"] / 0.2) ** 0.45
                 amp *= 1.0 if e["floor"] else 0.55
-                amp /= math.sqrt(max(1.0, dens / 3.0))
+                amp /= max(1.0, dens / 4.0) ** 0.35
                 if amp < 0.004:
                     continue
                 pan = float(np.clip((e["x"] - ax) / 3.2, -1, 1)) * 0.75
